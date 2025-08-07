@@ -5,6 +5,7 @@ from langchain.vectorstores import Pinecone
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 import pinecone
+from pinecone import Pinecone as PineconeClient, ServerlessSpec
 import uuid
 # import os
 
@@ -34,12 +35,32 @@ from sentence_transformers import SentenceTransformer
 
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')  # 384 dimensions
 
+print("PINECONE_API_KEY:", repr(os.getenv("OPENAI_API_KEY")))
+
+
 def generate_embedding(text):
     return model.encode(text).tolist()
 
-pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENVIRONMENT"))
+# pinecone.init(api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENVIRONMENT"))
+from langchain_community.vectorstores import Pinecone
 
-index = pinecone.Index(os.getenv("PINECONE_INDEX_NAME"))
+pc = PineconeClient(api_key=os.getenv("PINECONE_API_KEY"))
+index_name = os.getenv("PINECONE_INDEX_NAME")  # This is a string, e.g. "my-index"
+embedding_dimension = 384  # based on your embedding model
+
+# Create index if it doesn't exist
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=embedding_dimension,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-west-2")
+    )
+
+# Now connect to the Pinecone index (client)
+index = pc.Index(index_name)
+
+
 
 def store_in_pinecone(text, metadata):
     embedding = generate_embedding(text)
@@ -71,7 +92,7 @@ resume_text = extract_text_from_pdf("SiddharthWani_Tech_Resume.pdf")
 store_in_pinecone(resume_text, metadata={"name": "Siddharth Wani", "content": resume_text})
 
 results = query_pinecone("Tell me about the new employee joining our team")
-message = generate_onboarding_message(results["matches"], "Write a welcome message for the new hire.")
+message = generate_onboarding_message(results["matches"], "Write a welcome message for the new hire based on the their information, sharing their background, epxerience and skills.")
 
 print(message)
 
